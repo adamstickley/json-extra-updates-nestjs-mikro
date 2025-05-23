@@ -44,4 +44,41 @@ describe('app', () => {
     // inserted, but not updated
     expect(testChild.version).toBe(1);
   });
+
+  it('should only call one update (no forceUndefined)', async () => {
+    const module = await Test.createTestingModule({
+      imports: [
+        MikroOrmModule.forRoot({
+          ...config,
+          forceUndefined: false,
+          allowGlobalContext: true,
+          driver: PostgreSqlDriver,
+          connect: true,
+          debug: !!process.env.DEBUG,
+        }),
+        MikroOrmModule.forFeature([ParentEntity, TestEntity]),
+      ],
+      providers: [AppService],
+    }).compile();
+
+    const appService = module.get<AppService>(AppService);
+    const orm = await module.resolve(MikroORM);
+
+    const result = await appService.run();
+
+    const parent = await orm.em.findOneOrFail(ParentEntity, { id: result.id });
+    const testChild = await orm.em.findOneOrFail(TestEntity, {
+      id: result.children[0].id,
+    });
+
+    // make test not complain about hanging
+    await orm.close(true);
+    await module.close();
+
+    // inserted, then updated
+    expect(parent.version).toBe(2);
+
+    // inserted, but not updated
+    expect(testChild.version).toBe(1);
+  });
 });
